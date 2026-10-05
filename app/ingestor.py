@@ -29,6 +29,13 @@ def connect_database():
             delay = min(delay * 2, 15)
 
 
+def decode_payload(payload_bytes: bytes) -> dict[str, object]:
+    payload = json.loads(payload_bytes.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("MQTT payload must be a JSON object")
+    return payload
+
+
 def parse_mysql_utc(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
 
@@ -64,7 +71,7 @@ def main() -> None:
 
     def on_message(_client, _userdata, message):
         try:
-            payload = json.loads(message.payload.decode("utf-8"))
+            payload = decode_payload(message.payload)
             if message.topic.endswith("/availability"):
                 cursor.execute(
                     """INSERT INTO devices (device_id, zone_id, availability, last_seen_utc)

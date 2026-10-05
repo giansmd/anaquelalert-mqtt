@@ -1,6 +1,6 @@
 services:
   emqx:
-    image: emqx/emqx:latest
+    image: emqx/emqx:5.8.8
     container_name: anaquelalert-emqx
     restart: unless-stopped
     environment:
@@ -11,6 +11,40 @@ services:
       - "127.0.0.1:8083:8083"
       - "127.0.0.1:8084:8084"
       - "127.0.0.1:18083:18083"
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_auth_bootstrap:/opt/emqx/etc/anaquelalert-auth:ro
+      - ./emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
+      - ./emqx/acl.conf:/opt/emqx/etc/acl.conf:ro
+    depends_on:
+      auth-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "emqx", "ctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [anaquelnet]
+
+  auth-bootstrap:
+    build: .
+    container_name: anaquelalert-auth-bootstrap
+    command: ["python", "-m", "app.auth_bootstrap"]
+    restart: "no"
+    environment:
+      MQTT_C2_USERNAME: ${MQTT_C2_USERNAME:?Set MQTT_C2_USERNAME in .env}
+      MQTT_C2_PASSWORD: ${MQTT_C2_PASSWORD:?Set MQTT_C2_PASSWORD in .env}
+      MQTT_C3_USERNAME: ${MQTT_C3_USERNAME:?Set MQTT_C3_USERNAME in .env}
+      MQTT_C3_PASSWORD: ${MQTT_C3_PASSWORD:?Set MQTT_C3_PASSWORD in .env}
+      MQTT_C4_USERNAME: ${MQTT_C4_USERNAME:?Set MQTT_C4_USERNAME in .env}
+      MQTT_C4_PASSWORD: ${MQTT_C4_PASSWORD:?Set MQTT_C4_PASSWORD in .env}
+      MQTT_INGESTOR_USERNAME: ${MQTT_INGESTOR_USERNAME:?Set MQTT_INGESTOR_USERNAME in .env}
+      MQTT_INGESTOR_PASSWORD: ${MQTT_INGESTOR_PASSWORD:?Set MQTT_INGESTOR_PASSWORD in .env}
+      MQTT_BOOTSTRAP_DIR: /bootstrap
+      EMQX_UID: "1000"
+      EMQX_GID: "1000"
+    volumes:
+      - emqx_auth_bootstrap:/bootstrap
     networks: [anaquelnet]
 
   mysql:
@@ -19,7 +53,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-anaquelalert}
+      MYSQL_DATABASE: anaquelalert
       MYSQL_USER: ${MYSQL_USER:-anaquel}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
     ports:
@@ -59,14 +93,16 @@ services:
       MQTT_PORT: "1883"
       MYSQL_HOST: mysql
       MYSQL_PORT: "3306"
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-anaquelalert}
+      MYSQL_DATABASE: anaquelalert
       MYSQL_USER: ${MYSQL_USER:-anaquel}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MQTT_USERNAME: ${MQTT_INGESTOR_USERNAME:?Set MQTT_INGESTOR_USERNAME in .env}
+      MQTT_PASSWORD: ${MQTT_INGESTOR_PASSWORD:?Set MQTT_INGESTOR_PASSWORD in .env}
     depends_on:
       mysql:
         condition: service_healthy
       emqx:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "from pathlib import Path; raise SystemExit(not Path('/tmp/ingestor-ready').exists())"]
       interval: 3s
@@ -83,6 +119,8 @@ services:
       MQTT_HOST: emqx
       NODE_ID: C2
       ZONE_ID: anaquel-01-zona-1
+      MQTT_USERNAME: ${MQTT_C2_USERNAME:?Set MQTT_C2_USERNAME in .env}
+      MQTT_PASSWORD: ${MQTT_C2_PASSWORD:?Set MQTT_C2_PASSWORD in .env}
       INTERVAL_SECONDS: "2"
       KEEPALIVE_SECONDS: "5"
       EMPTY_AFTER: "4"
@@ -100,6 +138,8 @@ services:
       MQTT_HOST: emqx
       NODE_ID: C3
       ZONE_ID: anaquel-01-zona-2
+      MQTT_USERNAME: ${MQTT_C3_USERNAME:?Set MQTT_C3_USERNAME in .env}
+      MQTT_PASSWORD: ${MQTT_C3_PASSWORD:?Set MQTT_C3_PASSWORD in .env}
       INTERVAL_SECONDS: "2"
       KEEPALIVE_SECONDS: "5"
       EMPTY_AFTER: "3"
@@ -118,6 +158,8 @@ services:
       MQTT_HOST: emqx
       NODE_ID: C4
       ZONE_ID: anaquel-01-zona-3
+      MQTT_USERNAME: ${MQTT_C4_USERNAME:?Set MQTT_C4_USERNAME in .env}
+      MQTT_PASSWORD: ${MQTT_C4_PASSWORD:?Set MQTT_C4_PASSWORD in .env}
       INTERVAL_SECONDS: "2"
       KEEPALIVE_SECONDS: "5"
       EMPTY_AFTER: "0"
@@ -127,6 +169,8 @@ services:
     networks: [anaquelnet]
 
 volumes:
+  emqx_data:
+  emqx_auth_bootstrap:
   mysql_data:
 
 networks:

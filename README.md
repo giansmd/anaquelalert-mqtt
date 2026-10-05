@@ -12,8 +12,9 @@ La ESP32-CAM conserva HTTP para transmitir imágenes; MQTT se usa para telemetr�
 
 `C2/C3/C4 (publicadores MQTT) → EMQX → ingestor → MySQL`
 
-- EMQX expone MQTT en `1883`, WebSocket en `8083/8084` y dashboard en `18083`.
-- MySQL guarda nodos y eventos normalizados; `payload_json` conserva el mensaje original.
+- EMQX autentica los cuatro clientes con base de datos integrada y aplica ACL por usuario: C2/C3/C4 solo publican en sus tópicos de zona/disponibilidad; el ingestor solo se suscribe al árbol demo. Sin coincidencia, deniega.
+- El usuario y contraseña de MQTT se crean desde variables de entorno en el primer inicio. EMQX guarda usuarios en `emqx_data`; cambiar el `.env` después no rota por sí solo contraseñas ya creadas.
+- El stack enlaza puertos del host a `127.0.0.1`; no exponer `1883` sin TLS y credenciales. Para Dokploy, mantener Dashboard y phpMyAdmin privados y configurar acceso MQTT remoto mediante WSS/TLS con proxy/ruteo probado.
 - phpMyAdmin en `8080` permite inspeccionar las tablas.
 - `models/detection-event.json` muestra el modelo documental NoSQL asociado; es una propuesta lógica, no un MongoDB desplegado.
 
@@ -23,12 +24,12 @@ La guía pide una VM Linux liviana (usa Ubuntu como ejemplo; VirtualBox es el me
 
 ## Quickstart (stack del laboratorio)
 
-1. Copiar `.env.example` a `.env` y reemplazar las contraseñas de demostración.
+1. Copiar `.env.example` a `.env`; asignar contraseñas aleatorias URL-safe de al menos 24 caracteres a EMQX Dashboard, MySQL y cada usuario MQTT (`C2`, `C3`, `C4`, `INGESTOR`). Los usuarios MQTT deben conservar los nombres de ejemplo porque la ACL está asociada a ellos. No compartir ni versionar `.env`.
 2. Con Docker Engine y Docker Compose disponibles, ejecutar `docker compose up --build -d`.
 3. Revisar nodos e ingestor: `docker compose logs -f sensor-c2 sensor-c3 sensor-c4 ingestor`.
 4. Abrir EMQX Dashboard en `http://localhost:18083` y phpMyAdmin en `http://localhost:8080`.
 5. En phpMyAdmin, revisar `anaquelalert.devices` y `anaquelalert.detection_events`.
-6. Detener el stack: `docker compose down`. Para borrar los datos de MySQL, usar `docker compose down -v` (elimina el volumen).
+6. Detener el stack con `docker compose down`. `docker compose down -v` elimina tanto usuarios EMQX como datos MySQL; úsalo solo para reiniciar el laboratorio desde cero.
 
 C2 y C4 publican continuamente. C3 se cae de forma abrupta después de cinco mensajes; EMQX publicará su estado `offline` cuando venza el keepalive. Para reiniciar C3: `docker compose up -d sensor-c3`.
 
