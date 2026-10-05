@@ -1,0 +1,16 @@
+{
+  "_id": "9b3cc0a9-8566-4f5b-b90c-213874a94260",
+  "device_id": "C2",
+  "zone_id": "anaquel-01-zona-1",
+  "observed_at_utc": "2026-10-05T12:00:00Z",
+  "event_type": "shelf_detection",
+  "detection": {
+    "shelf_empty": true,
+    "confidence": 0.92
+  },
+  "availability": "online",
+  "provenance": {
+    "synthetic": true,
+    "source": "mqtt_simulator"
+  }
+}

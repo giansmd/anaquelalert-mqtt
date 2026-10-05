@@ -1,0 +1,134 @@
+services:
+  emqx:
+    image: emqx/emqx:latest
+    container_name: anaquelalert-emqx
+    restart: unless-stopped
+    environment:
+      EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USERNAME:-admin}
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:?Set EMQX_DASHBOARD_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:1883:1883"
+      - "127.0.0.1:8083:8083"
+      - "127.0.0.1:8084:8084"
+      - "127.0.0.1:18083:18083"
+    networks: [anaquelnet]
+
+  mysql:
+    image: mysql:8.0
+    container_name: anaquelalert-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-anaquelalert}
+      MYSQL_USER: ${MYSQL_USER:-anaquel}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [anaquelnet]
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: anaquelalert-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: ${MYSQL_USER:-anaquel}
+      PMA_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [anaquelnet]
+
+  ingestor:
+    build: .
+    container_name: anaquelalert-ingestor
+    command: ["python", "-m", "app.ingestor"]
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: emqx
+      MQTT_PORT: "1883"
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-anaquelalert}
+      MYSQL_USER: ${MYSQL_USER:-anaquel}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      emqx:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "from pathlib import Path; raise SystemExit(not Path('/tmp/ingestor-ready').exists())"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    networks: [anaquelnet]
+
+  sensor-c2:
+    build: .
+    container_name: anaquelalert-sensor-c2
+    command: ["python", "-m", "app.sensor_node"]
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: emqx
+      NODE_ID: C2
+      ZONE_ID: anaquel-01-zona-1
+      INTERVAL_SECONDS: "2"
+      KEEPALIVE_SECONDS: "5"
+      EMPTY_AFTER: "4"
+    depends_on:
+      ingestor:
+        condition: service_healthy
+    networks: [anaquelnet]
+
+  sensor-c3:
+    build: .
+    container_name: anaquelalert-sensor-c3
+    command: ["python", "-m", "app.sensor_node"]
+    restart: "no"
+    environment:
+      MQTT_HOST: emqx
+      NODE_ID: C3
+      ZONE_ID: anaquel-01-zona-2
+      INTERVAL_SECONDS: "2"
+      KEEPALIVE_SECONDS: "5"
+      EMPTY_AFTER: "3"
+      CRASH_AFTER: "5"
+    depends_on:
+      ingestor:
+        condition: service_healthy
+    networks: [anaquelnet]
+
+  sensor-c4:
+    build: .
+    container_name: anaquelalert-sensor-c4
+    command: ["python", "-m", "app.sensor_node"]
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: emqx
+      NODE_ID: C4
+      ZONE_ID: anaquel-01-zona-3
+      INTERVAL_SECONDS: "2"
+      KEEPALIVE_SECONDS: "5"
+      EMPTY_AFTER: "0"
+    depends_on:
+      ingestor:
+        condition: service_healthy
+    networks: [anaquelnet]
+
+volumes:
+  mysql_data:
+
+networks:
+  anaquelnet:
+    driver: bridge

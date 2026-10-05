@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anaquelalert.local/schemas/detection-event.schema.json",
+  "title": "AnaquelAlert Detection Event",
+  "description": "Documento NoSQL por evento MQTT de observación de anaquel. Ejemplo con valores sintéticos.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "_id": { "type": "string", "format": "uuid" },
+    "device_id": { "type": "string", "minLength": 1 },
+    "zone_id": { "type": "string", "minLength": 1 },
+    "observed_at_utc": { "type": "string", "format": "date-time" },
+    "event_type": { "const": "shelf_detection" },
+    "detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shelf_empty": { "type": "boolean" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": ["shelf_empty", "confidence"]
+    },
+    "availability": { "enum": ["online", "offline", "unknown"] },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "synthetic": { "type": "boolean" },
+        "source": { "type": "string" }
+      },
+      "required": ["synthetic", "source"]
+    }
+  },
+  "required": ["_id", "device_id", "zone_id", "observed_at_utc", "event_type", "detection", "availability", "provenance"]
+}
